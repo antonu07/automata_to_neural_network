@@ -3,3 +3,7 @@ bidict>=0.21.2
 numpy>=1.21
 dataclasses>=0.6
 git+https://github.com/0xnurl/fado-python3@master
+torch>=2.4.1
+torchvision>=0.19.1
+torchaudio>=2.4.1
+tensordict>=0.5.0

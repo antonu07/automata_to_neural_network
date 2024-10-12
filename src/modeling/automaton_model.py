@@ -11,7 +11,7 @@ class AutomatonNetwork(nn.Module):
     representing finite automata.
     """
 
-    def __init__(self, index_map, start_tensor, transfer_tensors, prob_tensors, finals_tensor):
+    def __init__(self, index_map, start_prob, start_tensor, transfer_tensors, prob_tensors, finals_tensor):
         """
         Initialization of the neural network.
 
@@ -22,11 +22,11 @@ class AutomatonNetwork(nn.Module):
         super().__init__()
 
         self.index_map = index_map
-        self.start_tensor = start_tensor
-        self.transfer_tensors = transfer_tensors
-        self.prob_tensors = prob_tensors
-        self.finals_tensor = finals_tensor
-        
+        self.start_prob = start_prob
+        self.register_buffer("start_tensor", start_tensor)
+        self.register_buffer("transfer_tensors", transfer_tensors)
+        self.register_buffer("prob_tensors", prob_tensors)
+        self.register_buffer("finals_tensor", finals_tensor)
 
     def forward(self, list):
         """
@@ -34,7 +34,7 @@ class AutomatonNetwork(nn.Module):
         """
 
         internal = self.start_tensor
-        prob = 1.0
+        prob = self.start_prob
 
         for i in list:
             prob = prob * float(torch.matmul(internal, self.prob_tensors[self.index_map[i]]))
@@ -42,6 +42,4 @@ class AutomatonNetwork(nn.Module):
 
         prob = prob * float(torch.matmul(internal, self.finals_tensor))
 
-        print(internal)
-        print(prob)
-        # return prob
+        return prob

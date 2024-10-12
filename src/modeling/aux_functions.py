@@ -4,9 +4,10 @@ import torch
 from collections import defaultdict
 
 import wfa.core_wfa as core_wfa
+import modeling.automaton_model as aut_model
 
 
-def convert_to_model(automaton: core_wfa.CoreWFA):
+def convert_to_model(automaton: core_wfa.CoreWFA) -> aut_model.AutomatonNetwork:
     """
     Converts automaton to tensors needed for the neural network model.
     """
@@ -17,7 +18,8 @@ def convert_to_model(automaton: core_wfa.CoreWFA):
     # starting tensor
     start_tensor = torch.zeros(state_num, dtype=torch.float64)
     for start in automaton.get_starts().items():
-        start_tensor[int(start[0])] = start[1]
+        start_tensor[int(start[0])] = 1
+        start_prob = float(start[1])
 
     # final probability tensor
     finals_tensor = torch.zeros(state_num, dtype=torch.float64)
@@ -52,4 +54,27 @@ def convert_to_model(automaton: core_wfa.CoreWFA):
         transfer_tensors[index_map[transition.symbol]][int(transition.src)][int(transition.dest)] = 1
         prob_tensors[index_map[transition.symbol]][int(transition.src)] = transition.weight
 
-    # TODO: add creation and return of model
+    return aut_model.AutomatonNetwork(index_map, start_prob, start_tensor,
+                                      transfer_tensors, prob_tensors, finals_tensor)
+
+
+def checkpoint(model: aut_model.AutomatonNetwork, filename: str):
+    """
+    Creates checkpoint from model.
+    """
+
+    torch.save({'state_dict': model.state_dict(),
+                'index_map': model.index_map,
+                'start_prob': model.start_prob
+                }, filename)
+
+
+def resume(model: aut_model.AutomatonNetwork, filename: str):
+    """
+    Resumes state of model from checkpoint.
+    """
+
+    checkpoint = torch.load(filename)
+    model.load_state_dict(checkpoint['state_dict'])
+    model.index_map = checkpoint['index_map']
+    model.start_prob = checkpoint['start_prob']

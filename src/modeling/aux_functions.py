@@ -15,39 +15,42 @@ def convert_to_model(automaton: core_wfa.CoreWFA) -> aut_model.AutomatonNetwork:
     # number of states
     state_num = len(automaton.get_states())
 
+    # value to make non zero probability tensors
+    epsilon = 1e-30
+
     # starting tensor
-    start_tensor = torch.zeros(state_num, dtype=torch.float64)
+    start_tensor = torch.zeros(state_num, dtype=torch.float32)
     for start in automaton.get_starts().items():
         start_tensor[int(start[0])] = 1
-        start_prob = float(start[1])
+        start_prob = torch.log(torch.tensor((start[1]), dtype=torch.float32))
 
     # final probability tensor
-    finals_tensor = torch.zeros(state_num, dtype=torch.float64)
+    finals_tensor = torch.zeros(state_num, dtype=torch.float32)
     for final in automaton.get_finals().items():
         finals_tensor[int(final[0])] = final[1]
 
     # tensor lists and default tensors
     transfer_tensors = []
-    transfer_tensor = torch.zeros((state_num, state_num), dtype=torch.float64)
+    transfer_tensor = torch.zeros((state_num, state_num), dtype=torch.float32)
     transfer_tensors.append(transfer_tensor)
 
     prob_tensors = []
-    prob_tensor = torch.zeros(state_num, dtype=torch.float64)
+    prob_tensor = torch.log(torch.full((state_num, ), epsilon, dtype=torch.float32))
     prob_tensors.append(prob_tensor)
 
     # map for indexing in tensor lists
     index_map = defaultdict(int)
     next_index = 1
     for symbol in automaton.get_alphabet():
-        # add the 
+        # add the symbol
         index_map[symbol] = next_index
         next_index += 1
 
         # add tensors
-        transfer_tensor = torch.zeros((state_num, state_num), dtype=torch.float64)
+        transfer_tensor = torch.zeros((state_num, state_num), dtype=torch.float32)
         transfer_tensors.append(transfer_tensor)
-        prob_tensor = torch.zeros(state_num, dtype=torch.float64)
-        prob_tensors.append(prob_tensor)
+        prob_tensor = torch.full((state_num, ), epsilon, dtype=torch.float32)
+        prob_tensors.append(torch.log(prob_tensor))
 
     # add transitions and probabilities to lists of tensors
     for transition in automaton.get_transitions():
@@ -58,14 +61,29 @@ def convert_to_model(automaton: core_wfa.CoreWFA) -> aut_model.AutomatonNetwork:
                                       transfer_tensors, prob_tensors, finals_tensor)
 
 
+def process_window(model: aut_model.AutomatonNetwork, window):
+    prob_list = []
+
+    for conversation in window:
+        prob_list.append(model(conversation))
+
+    if len(prob_list) == 0:
+        return [1.0]
+    else:
+        return [sum(prob_list) / len(prob_list)]
+
+
 def checkpoint(model: aut_model.AutomatonNetwork, filename: str):
     """
     Creates checkpoint from model.
     """
 
-    torch.save({'state_dict': model.state_dict(),
-                'index_map': model.index_map,
-                'start_prob': model.start_prob
+    torch.save({'index_map': model.index_map,
+                'start_prob': model.start_prob,
+                'start_tensor': model.start_tensor,
+                'transfer_tensors': model.transfer_tensors,
+                'prob_tensors': model.prob_tensors,
+                'finals_tensor': model.finals_tensor,
                 }, filename)
 
 
@@ -74,7 +92,10 @@ def resume(model: aut_model.AutomatonNetwork, filename: str):
     Resumes state of model from checkpoint.
     """
 
-    checkpoint = torch.load(filename)
-    model.load_state_dict(checkpoint['state_dict'])
+    checkpoint = torch.load(filename, weights_only=False)
     model.index_map = checkpoint['index_map']
     model.start_prob = checkpoint['start_prob']
+    model.start_tensor = checkpoint['start_tensor']
+    model.transfer_tensors = checkpoint['transfer_tensors']
+    model.prob_tensors = checkpoint['prob_tensors']
+    model.finals_tensor = checkpoint['finals_tensor']

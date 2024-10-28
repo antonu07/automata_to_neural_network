@@ -34,6 +34,9 @@ import learning.alergia as alergia
 import parser.IEC104_parser as con_par
 import parser.IEC104_conv_parser as iec_prep_par
 
+import modeling.aux_functions as aux_func
+import modeling.automaton_model as aut_model
+
 ComPairType = FrozenSet[Tuple[str,str]]
 rows_filter = ["asduType", "cot"]
 TRAINING = 1.0
@@ -209,6 +212,17 @@ def main():
         sys.stderr.write("Missing column in the input csv: {0}\n".format(e))
         sys.exit(1)
 
+    ############################################################################
+    # Creating directory for models
+    ############################################################################
+
+    file_path = os.path.splitext(os.path.basename(csv_file))[0]
+
+    if not os.path.exists(file_path):
+        os.mkdir(file_path)
+
+    ############################################################################
+
     for compr_parser in parser.split_communication_pairs():
         compr_parser.parse_conversations()
 
@@ -222,15 +236,22 @@ def main():
             sys.stderr.write("Learning error {0}: {1}\n".format(csv_file, e))
             sys.exit(1)
 
+        ########################################################################
+        # Storing model
+        ########################################################################
+
         par = ent_format(compr_parser.compair)
-        store_automata(csv_file, fa, alpha, t0, par)
+        filename = "{0}/{1}.pth".format(file_path, par)
+        aux_func.checkpoint(aux_func.convert_to_model(fa), filename)
+
+        ########################################################################
 
         miss = 0
         for line in testing:
             prob = fa.string_prob_deterministic(line)
             if prob is None:
                 miss += 1
-        
+
         print("File: {0} {1}".format(csv_file, ent_format(compr_parser.compair)))
         if (alpha is not None) and (t0 is not None):
             print("alpha: {0}, t0: {1}".format(alpha, t0))

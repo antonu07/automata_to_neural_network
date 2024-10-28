@@ -45,6 +45,10 @@ import detection.distr_comparison as distr
 import detection.member as mem
 import parser.IEC104_conv_parser as iec_prep_par
 
+import torch
+import modeling.aux_functions as aux_func
+import modeling.automaton_model as aut_model
+
 SPARSE = False
 
 rows_filter_normal = ["asduType", "cot"]
@@ -52,6 +56,7 @@ DURATION = 300
 AGGREGATE = True
 ACCELERATE = False
 
+Model_exists = True
 
 ComPairType = FrozenSet[Tuple[str,str]]
 AutListType = List[Union[core_wfa_export.CoreWFAExport,None]]
@@ -218,6 +223,29 @@ def print_help():
 
 
 """
+Load model from directory
+"""
+def load_model(item, par, model):
+
+    [(fip, fp), (sip, sp)] = list(item.compair)
+    # two posible names for model
+    file_name1 = "{0}/{1}v{2}--{3}v{4}.pth".format(par.normal_file, fip, fp, sip, sp)
+    file_name2 = "{0}/{1}v{2}--{3}v{4}.pth".format(par.normal_file, sip, sp, fip, fp)
+    global Model_exists
+
+    if os.path.isfile(file_name1):
+        Model_exists = True
+        return aux_func.resume(model, file_name1)
+
+    elif os.path.isfile(file_name2):
+        Model_exists = True
+        return aux_func.resume(model, file_name2)
+
+    else:
+        Model_exists = False
+
+
+"""
 Distribution-comparison-based anomaly detection
 """
 def main():
@@ -266,72 +294,58 @@ def main():
             sys.stderr.write("Error: bad parameters (try --help)\n")
             sys.exit(1)
 
-    if len(args) < 3:
+    if len(args) < 2:
         sys.stderr.write("Missing input files (try --help)\n")
         sys.exit(1)
     par.normal_file = sys.argv[1]
     par.test_file = sys.argv[2]
 
+    if not os.path.exists(par.normal_file):
+        sys.stderr.write("Directory with models doesn't exist\n")
+        sys.exit(1)
+
     try:
-        normal_fd = open(par.normal_file, "r")
-        normal_msgs = con_par.get_messages(normal_fd)
         test_fd = open(par.test_file, "r")
         test_msgs = con_par.get_messages(test_fd)
-        normal_fd.close()
         test_fd.close()
     except FileNotFoundError:
-        sys.stderr.write("Cannot open input files\n")
+        sys.stderr.write("Cannot open input file\n")
         sys.exit(1)
 
     if par.file_format == InputFormat.IPFIX:
-        normal_parser = con_par.IEC104Parser(normal_msgs)
         test_parser = con_par.IEC104Parser(test_msgs)
     elif par.file_format == InputFormat.CONV:
-        normal_parser = iec_prep_par.IEC104ConvParser(normal_msgs)
         test_parser = iec_prep_par.IEC104ConvParser(test_msgs)
 
-    try:
-        golden_map = golden_proc(normal_parser, learn_proc, par)
-    except KeyError as e:
-        sys.stderr.write("Missing column in the input csv: {0}\n".format(e))
-        sys.exit(1)
-
-    if par.alg == Algorithms.DISTR:
-        anom = distr.AnomDistrComparison(golden_map, learn_proc)
-        anom.remove_identical()
-        if par.reduced is not None:
-            anom.remove_euclid_similar(par.reduced)
-        print("Automata counts: ")
-        for k,v in anom.golden_map.items():
-            print("{0} | {1}".format(ent_format(k), len(v)))
-        print()
-    elif par.alg == Algorithms.MEMBER:
-        anom = mem.AnomMember(golden_map, learn_proc)
-
-
     anomalies = defaultdict(lambda: dict())
-    if (par.alg == Algorithms.DISTR) and (par.threshold is not None):
-        golden_map_member = learn_golden_member(normal_parser, learn_proc, par)
-        anom_member = mem.AnomMember(golden_map_member, learn_proc)
     res = defaultdict(lambda: [])
     test_com = test_parser.split_communication_pairs()
     last = 0
     acc = par.threshold if ACCELERATE and par.threshold is not None else 0.0
 
+    model = aut_model.AutomatonNetwork()
+
     for item in test_com:
+
+        # Load needed model
+        load_model(item, par, model)
+
         cnt = 0
         wns = item.split_to_windows(DURATION)
+
         for window in wns:
             window.parse_conversations()
-            r = anom.detect(window.get_all_conversations(abstraction), item.compair, acc)
-            res[item.compair].append(r)
+
+            if Model_exists:
+                # Converting conversation to tensor
+                conv = window.get_all_conversations(abstraction)
+                r = aux_func.process_window(model, conv)
+                res[item.compair].append(r)
+            else:
+                r = torch.tensor((1.0), dtype=torch.float64)
+                res[item.compair].append(r)
+
             last = max(cnt, last)
-            if (par.alg == Algorithms.DISTR) and (par.threshold is not None):
-                if min(r) > par.threshold:
-                    ind = r.index(min(r))
-                    model = anom.golden_map[item.compair][ind]
-                    mem_det = anom_member.apply_detection(model, window.get_all_conversations(abstraction), item.compair)
-                    anomalies[item.compair][cnt] = AnomDetails(mem_det, copy.deepcopy(anom.test_fa), copy.deepcopy(anom.golden_map[item.compair][ind]))
             cnt += 1
 
     print("Detection results: ")
@@ -345,39 +359,14 @@ def main():
                 if i == last:
                     continue
                 if AGGREGATE:
-                    print("{0};{1}".format(i, min(v[i])))
+                    print("{0};{1:.4f}".format(i, min(v[i])))
                 else:
-                    print("{0};{1}".format(i, v[i]))
+                    print("{0};{1:.4f}".format(i, v[i]))
         elif par.alg == Algorithms.MEMBER:
             for i in range(len(v)):
                 if i == last:
                     continue
-                print("{0};{1}".format(i, [ it for its in v[i] for it in its ]))
-
-    if (par.alg == Algorithms.DISTR) and (par.threshold is not None):
-        print("\nPossibly problematic conversations: ")
-        for ent, windows in anomalies.items():
-            for i, det in windows.items():
-                if i == last:
-                    continue
-                print("Communicating: {0}; Window: {1}".format(ent_format(ent), i))
-
-                print("Bad conversations:")
-                tmp = [k for k,v in itertools.groupby(sorted(det.bad_conv))]
-                print(conv_list_format(tmp))
-
-                #aut = det.model_aut
-                #aut.__class__ = core_wfa_export.CoreWFAExport
-                #print(aut.to_dot())
-
-                print("Missing conversation:")
-                if det.model_aut is None:
-                    print("empty model")
-                else:
-                    word, pr = det.model_aut.difference_dwfa(det.test_aut).get_most_probable_string()
-                    print(conv_format(word), pr)
-
-                print()
+                print("{0};{1:.4f}".format(i, [ it for its in v[i] for it in its ]))
 
 
 if __name__ == "__main__":

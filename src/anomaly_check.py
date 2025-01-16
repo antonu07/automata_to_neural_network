@@ -366,7 +366,7 @@ def main():
             for i in range(len(v)):
                 if i == last:
                     continue
-                print("{0};{1:.4f}".format(i, [ it for its in v[i] for it in its ]))
+                print("{0};{1}".format(i, v[i]))
 
 
 if __name__ == "__main__":

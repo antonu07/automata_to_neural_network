@@ -62,15 +62,14 @@ def convert_to_model(automaton: core_wfa.CoreWFA) -> aut_model.AutomatonNetwork:
 
 
 def process_window(model: aut_model.AutomatonNetwork, window):
-    prob_list = []
+    res = []
 
     for conversation in window:
-        prob_list.append(model(conversation))
+        prob = model(conversation)
+        if prob >= 0.99:
+            res.append(conversation)
 
-    if len(prob_list) == 0:
-        return [1.0]
-    else:
-        return [sum(prob_list) / len(prob_list)]
+    return res
 
 
 def checkpoint(model: aut_model.AutomatonNetwork, filename: str):

@@ -10,11 +10,25 @@ SELECTED_ATTACK = "scanning-attack"
 
 # Statistics gathered using dataset_analysis.py
 ATTACKS = {
-  "scanning-attack": {
-      ('100', '6'): 127,
-      ('100', '47'): 123,
-      ('100', '7'): 4
-  }
+    "switching-attack": {
+        ('46', '6'): 24,
+        ('46', '7'): 24
+    },
+    "scanning-attack": {
+        ('100', '6'): 127,
+        ('100', '47'): 123,
+        ('100', '7'): 4
+    },
+    "injection-attack": {
+        ('45', '6'): 15,
+        ('45', '7'): 15,
+        ('122', '13'): 18,
+        ('120', '13'): 6,
+        ('121', '13'): 6,
+        ('125', '13'): 144,
+        ('123', '13'): 12,
+        ('124', '13'): 12
+    }
 }
 
 # Select the correct data to compare the output

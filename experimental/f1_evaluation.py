@@ -47,9 +47,6 @@ def main():
         for message in messages:
             outputs[message] += 1
 
-    # sum of outputs
-    # print(outputs)
-
     # get set of keys from both dicts
     keys = set(outputs.keys())
     keys.update(ATTACK.keys())
@@ -74,7 +71,6 @@ def main():
     print("Evaluated file: " + file)
     print("Selected attack: " + SELECTED_ATTACK)
     print("F1 score: " + str(f1))
-
 
 
 if __name__ == "__main__":

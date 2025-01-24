@@ -8,69 +8,64 @@ from collections import defaultdict
 COLUMNS = ["asduType", "cot"]
 
 # selection of file to analyze
-SELECTED_FILE = "scanning-attack"
+SELECTED_FILE = "rogue-devices"
 
 if SELECTED_FILE == "connection-loss":
     # connection-loss
     # not possible only with asduType and cot
-    COL1_VALS = []
-    COL2_VALS = []
 
     def check(packet):
         return False
 
 elif SELECTED_FILE == "switching-attack":
     # switching-attack
-    COL1_VALS = ['46']
-    COL2_VALS = ['6', '7', '10']
+    ASDUTYPE_VALS = ['46']
+    COT_VALS = ['6', '7', '10']
 
     def check(packet):
-        return packet[COLUMNS[0]] in COL1_VALS and packet[COLUMNS[1]] in COL2_VALS
+        return packet["asduType"] in ASDUTYPE_VALS and packet["cot"] in COT_VALS
 
 elif SELECTED_FILE == "scanning-attack":
     # scanning-attack
     # only vertical
-    COL1_VALS = ['100']
-    COL2_VALS = ['6', '7', '47']
+    ASDUTYPE_VALS = ['100']
+    COT_VALS = ['6', '7', '47']
 
     def check(packet):
-        return packet[COLUMNS[0]] in COL1_VALS and packet[COLUMNS[1]] in COL2_VALS
+        return packet["asduType"] in ASDUTYPE_VALS and packet["cot"] in COT_VALS
 
 elif SELECTED_FILE == "dos-attack":
     # dos-attack
     # not possible only with asduType and cot
-    COL1_VALS = []
-    COL2_VALS = []
 
     def check(packet):
         return False
 
 elif SELECTED_FILE == "rogue-devices":
     # rogue-devices
-    # not possible only with asduType and cot
-    COL1_VALS = []
-    COL2_VALS = []
+    # not possible only with asduType and cot (detano can)
+    ATTACK_IP = ['192.168.11.246']
 
     def check(packet):
-        return False
+        return (packet["srcIP"] in ATTACK_IP or packet["dstIP"] in ATTACK_IP)
 
 elif SELECTED_FILE == "injection-attack":
     # injection-attack
-    COL1_VALS = ['45']
-    COL1_VALS2 = ['122', '120', '121', '123', '124', '125']
-    COL2_VALS = ['6', '7']
+    ASDUTYPE_VALS = ['45']
+    ASDUTYPE_VALS2 = ['122', '120', '121', '123', '124', '125']
+    COT_VALS = ['6', '7']
 
     def check(packet):
-        return (packet[COLUMNS[0]] in COL1_VALS and packet[COLUMNS[1]] in COL2_VALS) or packet[COLUMNS[0]] in COL1_VALS2
+        return (packet["asduType"] in ASDUTYPE_VALS and packet["cot"] in COT_VALS) or packet["asduType"] in ASDUTYPE_VALS2
 
 
 def main():
     # read file
     file = sys.argv[1]
-    data = pd.read_csv(file, delimiter=";", usecols=COLUMNS)
+    data = pd.read_csv(file, delimiter=";")
 
     # remove empty
-    data = data.dropna()
+    data = data.dropna(subset=COLUMNS)
     data = data.astype({COLUMNS[0]: int, COLUMNS[1]: int})
     data = data.astype({COLUMNS[0]: str, COLUMNS[1]: str})
 

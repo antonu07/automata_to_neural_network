@@ -242,7 +242,8 @@ def main():
 
         par = ent_format(compr_parser.compair)
         filename = "{0}/{1}.pth".format(file_path, par)
-        aux_func.checkpoint(aux_func.convert_to_model(fa), filename)
+        model = aux_func.convert_to_model(fa)
+        aux_func.checkpoint(model, filename)
 
         ########################################################################
 

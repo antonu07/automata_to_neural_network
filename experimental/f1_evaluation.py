@@ -6,7 +6,7 @@ import pandas as pd
 from collections import defaultdict
 
 # Select attack file used
-SELECTED_ATTACK = "scanning-attack"
+SELECTED_ATTACK = "rogue-devices"
 
 # Statistics gathered using dataset_analysis.py
 ATTACKS = {
@@ -28,6 +28,11 @@ ATTACKS = {
         ('125', '13'): 144,
         ('123', '13'): 12,
         ('124', '13'): 12
+    },
+    "rogue-devices": {
+        ('36', '3'): 289
+    },
+    "other": {
     }
 }
 
@@ -77,14 +82,25 @@ def main():
         fn += max(0, ATTACK[key] - outputs[key])
 
     # calculate F1 score
-    precision = tp / (tp + fp)
-    recall = tp / (tp + fn)
+    if (tp == 0) and (fp == 0):
+        precision = 0
+    else:
+        precision = tp / (tp + fp)
+    if (tp == 0) and (fn == 0):
+        recall = 0
+    else:
+        recall = tp / (tp + fn)
 
-    f1 = 2 * ((precision * recall) / (precision + recall))
+    if (precision == 0) and (recall == 0):
+        f1 = 0.0
+    else:
+        f1 = 2 * ((precision * recall) / (precision + recall))
 
     print("Evaluated file: " + file)
     print("Selected attack: " + SELECTED_ATTACK)
     print("F1 score: " + str(f1))
+    print("TP: " + str(tp) + ", FP: " + str(fp) + ", FN: " + str(fn))
+    print("Detected: " + str(outputs))
 
 
 if __name__ == "__main__":

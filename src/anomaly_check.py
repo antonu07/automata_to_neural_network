@@ -342,7 +342,7 @@ def main():
                 r = aux_func.process_window(model, conv)
                 res[item.compair].append(r)
             else:
-                r = torch.tensor((1.0), dtype=torch.float64)
+                r = window.get_all_conversations(abstraction)
                 res[item.compair].append(r)
 
             last = max(cnt, last)

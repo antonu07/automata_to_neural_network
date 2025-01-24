@@ -98,3 +98,22 @@ def resume(model: aut_model.AutomatonNetwork, filename: str):
     model.transfer_tensors = checkpoint['transfer_tensors']
     model.prob_tensors = checkpoint['prob_tensors']
     model.finals_tensor = checkpoint['finals_tensor']
+
+
+def print_model(model: aut_model.AutomatonNetwork):
+    """
+    Prints the current state of model to stdout.
+    """
+
+    print("index_map:")
+    print(model.index_map)
+    print("start_prob:")
+    print(model.start_prob)
+    print("start_tensor:")
+    print(model.start_tensor)
+    print("transfer_tensors:")
+    print(model.transfer_tensors)
+    print("prob_tensors:")
+    print(model.prob_tensors)
+    print("finals_tensor:")
+    print(model.finals_tensor)

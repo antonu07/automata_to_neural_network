@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import torch
+import numpy
 from collections import defaultdict
 
 import wfa.core_wfa as core_wfa
@@ -25,18 +26,18 @@ def convert_to_model(automaton: core_wfa.CoreWFA) -> aut_model.AutomatonNetwork:
         start_prob = torch.log(torch.tensor((start[1]), dtype=torch.float32))
 
     # final probability tensor
-    finals_vector = torch.zeros(state_num, dtype=torch.float32)
+    finals_vector = torch.log(torch.full((state_num, ), epsilon, dtype=torch.float32))
     for final in automaton.get_finals().items():
-        finals_vector[int(final[0])] = final[1]
+        finals_vector[int(final[0])] = numpy.log(final[1])
 
     # tensor lists and default tensors
     transfer_matrices = []
-    transfer_tensor = torch.zeros((state_num, state_num), dtype=torch.float32)
-    transfer_matrices.append(transfer_tensor)
+    transfer_matrix = torch.zeros((state_num, state_num), dtype=torch.float32)
+    transfer_matrices.append(transfer_matrix)
 
     prob_vectors = []
-    prob_tensor = torch.log(torch.full((state_num, ), epsilon, dtype=torch.float32))
-    prob_vectors.append(prob_tensor)
+    prob_vector = torch.log(torch.full((state_num, ), epsilon, dtype=torch.float32))
+    prob_vectors.append(prob_vector)
 
     # map for indexing in tensor lists
     index_map = defaultdict(int)
@@ -47,15 +48,15 @@ def convert_to_model(automaton: core_wfa.CoreWFA) -> aut_model.AutomatonNetwork:
         next_index += 1
 
         # add tensors
-        transfer_tensor = torch.zeros((state_num, state_num), dtype=torch.float32)
-        transfer_matrices.append(transfer_tensor)
-        prob_tensor = torch.full((state_num, ), epsilon, dtype=torch.float32)
-        prob_vectors.append(torch.log(prob_tensor))
+        transfer_matrix = torch.zeros((state_num, state_num), dtype=torch.float32)
+        transfer_matrices.append(transfer_matrix)
+        prob_vector = torch.full((state_num, ), epsilon, dtype=torch.float32)
+        prob_vectors.append(torch.log(prob_vector))
 
     # add transitions and probabilities to lists of tensors
     for transition in automaton.get_transitions():
         transfer_matrices[index_map[transition.symbol]][int(transition.src)][int(transition.dest)] = 1
-        prob_vectors[index_map[transition.symbol]][int(transition.src)] = transition.weight
+        prob_vectors[index_map[transition.symbol]][int(transition.src)] = numpy.log(transition.weight)
 
     return aut_model.AutomatonNetwork(index_map, start_prob, start_vector,
                                       transfer_matrices, prob_vectors, finals_vector)
@@ -66,7 +67,7 @@ def process_window(model: aut_model.AutomatonNetwork, window):
 
     for conversation in window:
         prob = model(conversation)
-        if prob >= 0.99:
+        if prob >= 1.0:
             res.append(conversation)
 
     return res

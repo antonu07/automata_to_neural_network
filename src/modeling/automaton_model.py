@@ -42,10 +42,6 @@ class AutomatonNetwork(nn.Module):
 
         prob = prob + self.internal_vector @ self.finals_vector
 
-        # crop the probability
-        if prob > 0:
-            prob = torch.tensor((0.0), dtype=torch.float32)
-
         prob = torch.exp(prob)
         prob = 1 - prob
         return prob

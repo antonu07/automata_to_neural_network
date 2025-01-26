@@ -43,7 +43,6 @@ elif SELECTED_FILE == "dos-attack":
 
 elif SELECTED_FILE == "rogue-devices":
     # rogue-devices
-    # not possible only with asduType and cot (detano can)
     ATTACK_IP = ['192.168.11.246']
 
     def check(packet):

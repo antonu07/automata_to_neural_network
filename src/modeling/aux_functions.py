@@ -20,23 +20,23 @@ def convert_to_model(automaton: core_wfa.CoreWFA) -> aut_model.AutomatonNetwork:
     epsilon = 1e-30
 
     # starting tensor
-    start_vector = torch.zeros(state_num, dtype=torch.float32)
+    start_vector = torch.zeros(state_num, dtype=torch.float32, requires_grad=False)
     for start in automaton.get_starts().items():
         start_vector[int(start[0])] = 1
-        start_prob = torch.log(torch.tensor((start[1]), dtype=torch.float32))
+        start_prob = torch.log(torch.tensor((start[1]), dtype=torch.float32, requires_grad=False))
 
     # final probability tensor
-    finals_vector = torch.log(torch.full((state_num, ), epsilon, dtype=torch.float32))
+    finals_vector = torch.log(torch.full((state_num, ), epsilon, dtype=torch.float32, requires_grad=False))
     for final in automaton.get_finals().items():
         finals_vector[int(final[0])] = numpy.log(final[1])
 
     # tensor lists and default tensors
     transfer_matrices = []
-    transfer_matrix = torch.zeros((state_num, state_num), dtype=torch.float32)
+    transfer_matrix = torch.zeros((state_num, state_num), dtype=torch.float32, requires_grad=False)
     transfer_matrices.append(transfer_matrix)
 
     prob_vectors = []
-    prob_vector = torch.log(torch.full((state_num, ), epsilon, dtype=torch.float32))
+    prob_vector = torch.log(torch.full((state_num, ), epsilon, dtype=torch.float32, requires_grad=False))
     prob_vectors.append(prob_vector)
 
     # map for indexing in tensor lists
@@ -48,9 +48,9 @@ def convert_to_model(automaton: core_wfa.CoreWFA) -> aut_model.AutomatonNetwork:
         next_index += 1
 
         # add tensors
-        transfer_matrix = torch.zeros((state_num, state_num), dtype=torch.float32)
+        transfer_matrix = torch.zeros((state_num, state_num), dtype=torch.float32, requires_grad=False)
         transfer_matrices.append(transfer_matrix)
-        prob_vector = torch.full((state_num, ), epsilon, dtype=torch.float32)
+        prob_vector = torch.full((state_num, ), epsilon, dtype=torch.float32, requires_grad=False)
         prob_vectors.append(torch.log(prob_vector))
 
     # add transitions and probabilities to lists of tensors

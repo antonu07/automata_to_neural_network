@@ -37,8 +37,8 @@ import parser.IEC104_conv_parser as iec_prep_par
 import modeling.aux_functions as aux_func
 import modeling.automaton_model as aut_model
 
-ComPairType = FrozenSet[Tuple[str,str]]
-rows_filter = ["asduType", "cot"]
+ComPairType = FrozenSet[Tuple[str,str,str]]
+rows_filter = ["TimeStamp", "asduType", "cot"]
 TRAINING = 1.0
 
 """
@@ -230,8 +230,20 @@ def main():
         index = int(len(lines)*TRAINING)
         training, testing = lines[:index], lines[index:]
 
+
+        ########################################################################
+        # Split tuples for learning automaton and neural network
+        ########################################################################
+
+        testing_aut = [[(t[1], t[2]) for t in sublist] for sublist in testing]
+
+        training_neural = [[t[0] for t in sublist] for sublist in training]
+        training_aut = [[(t[1], t[2]) for t in sublist] for sublist in training]
+
+        ########################################################################
+
         try:
-            fa, alpha, t0 = learn_fnc(training)
+            fa, alpha, t0 = learn_fnc(training_aut)
         except Exception as e:
             sys.stderr.write("Learning error {0}: {1}\n".format(csv_file, e))
             sys.exit(1)
@@ -245,10 +257,13 @@ def main():
         model = aux_func.convert_to_model(fa)
         aux_func.checkpoint(model, filename)
 
+        for conversation in training_neural:
+            model.timestamp_forward(conversation)
+
         ########################################################################
 
         miss = 0
-        for line in testing:
+        for line in testing_aut:
             prob = fa.string_prob_deterministic(line)
             if prob is None:
                 miss += 1
@@ -257,9 +272,9 @@ def main():
         if (alpha is not None) and (t0 is not None):
             print("alpha: {0}, t0: {1}".format(alpha, t0))
         print("States {0}".format(len(fa.get_states())))
-        print("Testing: {0}/{1} (missclassified/all)".format(miss, len(testing)))
-        if len(testing) > 0:
-            print("Accuracy: {0}".format((len(testing)-miss)/float(len(testing))))
+        print("Testing: {0}/{1} (missclassified/all)".format(miss, len(testing_aut)))
+        if len(testing_aut) > 0:
+            print("Accuracy: {0}".format((len(testing_aut)-miss)/float(len(testing_aut))))
 
 
 if __name__ == "__main__":

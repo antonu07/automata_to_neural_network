@@ -51,14 +51,14 @@ import modeling.automaton_model as aut_model
 
 SPARSE = False
 
-rows_filter_normal = ["asduType", "cot"]
+rows_filter_normal = ["TimeStamp", "asduType", "cot"]
 DURATION = 300
 AGGREGATE = True
 ACCELERATE = False
 
 Model_exists = True
 
-ComPairType = FrozenSet[Tuple[str,str]]
+ComPairType = FrozenSet[Tuple[str,str,str]]
 AutListType = List[Union[core_wfa_export.CoreWFAExport,None]]
 
 """
@@ -349,7 +349,7 @@ def main():
             cnt += 1
 
     print("Detection results: ")
-    #Printing results
+    # Printing results
     print("{0} {1}".format(par.normal_file, par.test_file))
     for k, v in res.items():
         print("\n"+ent_format(k))

@@ -86,8 +86,10 @@ class AutomatonNetwork(nn.Module):
 
         # Get time differences
         if len(timestamps_retyped) == 0:
-            return torch.zeros((1, 1), dtype=torch.float32)
+            # No timestamp
+            return torch.ones((1, 1), dtype=torch.float32)
         elif len(timestamps_retyped) == 1:
+            # One timestamp
             time_diffs = [0.0]
         else:
             time_diffs = [(timestamps_retyped[n] - timestamps_retyped[n - 1]).total_seconds() for n in range(1, len(timestamps_retyped))]
@@ -101,6 +103,7 @@ class AutomatonNetwork(nn.Module):
 
         out, _ = self.lstm(inputs, (h0, c0))
         out = self.gaussian(out)
+        out = 1 - out
         return out
 
     def gaussian(self, x, alpha=1.0):

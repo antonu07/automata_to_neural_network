@@ -37,10 +37,11 @@ class AutomatonNetwork(nn.Module):
         """
         Definition of forward pass of the model.
         """
-
-        timestamps = [[t[0] for t in sublist] for sublist in conversation]
-        asduType_cot = [[(t[1], t[2]) for t in sublist] for sublist in conversation]
-
+        print("full convs: {0}".format(conversation))
+        timestamps = [tuple[0] for tuple in conversation]
+        asduType_cot = [(tuple[1], tuple[2]) for tuple in conversation]
+        print("timestamp: {0}".format(timestamps))
+        print("other: {0}".format(asduType_cot))
         ret_timestamp = self.timestamp_forward(timestamps)
         ret_automaton = self.automaton_forward(asduType_cot)
         print("{0}, {1}".format(ret_automaton, ret_timestamp))
@@ -95,16 +96,23 @@ class AutomatonNetwork(nn.Module):
             time_diffs = [(timestamps_retyped[n] - timestamps_retyped[n - 1]).total_seconds() for n in range(1, len(timestamps_retyped))]
 
         inputs = torch.tensor(time_diffs, dtype=torch.float32, requires_grad=False)
+        inputs = inputs.unsqueeze(-1)
+        print(inputs.size())
 
-        # Model here
-        batch_size = inputs.size(0)
+        return self.timestamp_lstm(inputs, 0)
+
+    def timestamp_lstm(self, timestamps, batch_size):
+        """
+        Definition of the LSTM.
+        """
+
         h0 = torch.zeros(STACKED, batch_size, HIDDEN)
         c0 = torch.zeros(STACKED, batch_size, HIDDEN)
 
-        out, _ = self.lstm(inputs, (h0, c0))
+        out, _ = self.lstm(timestamps, (h0, c0))
         out = self.gaussian(out)
-        out = 1 - out
         return out
+
 
     def gaussian(self, x, alpha=1.0):
         return torch.exp(-alpha * x**2)

@@ -337,7 +337,7 @@ def main():
             window.parse_conversations()
 
             if Model_exists:
-                # Converting conversation to tensor
+                # Processing conversations
                 conv = window.get_all_conversations(abstraction)
                 r = aux_func.process_window(model, conv)
                 res[item.compair].append(r)

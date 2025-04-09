@@ -37,6 +37,20 @@ import parser.IEC104_conv_parser as iec_prep_par
 import modeling.aux_functions as aux_func
 import modeling.automaton_model as aut_model
 
+import torch
+import torch.nn as nn
+from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
+
+from datetime import datetime, timedelta
+
+# LSTM learning
+LEARNING_RATE = 0.05
+MAX_EPOCH = 50
+STOP_EARLY_THRESHOLD = 5
+LEARNING = 0.85
+BATCH_SIZE = 512
+
 ComPairType = FrozenSet[Tuple[str,str,str]]
 rows_filter = ["TimeStamp", "asduType", "cot"]
 TRAINING = 1.0
@@ -149,6 +163,101 @@ def store_automata(csv_file, fa, alpha, t0, par=""):
     dot_fd.close()
 
 
+# Dataset definition
+class NetworkDataset(Dataset):
+    def __init__(self, X, y):
+        self.X = X
+        self.y = y
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, i):
+        return self.X[i], self.y[i]
+
+
+"""
+Training function
+"""
+def train_epoch(model, learn_loader, epoch, loss_function, optimizer):
+    model.train(True)
+
+    for batch_index, batch in enumerate(learn_loader):
+        x_batch, y_batch = batch[0], batch[1]
+
+        output = model.timestamp_lstm(x_batch)
+        loss = loss_function(output, y_batch)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+
+"""
+Validation function
+"""
+def validate_epoch(model, validate_loader, loss_function):
+    model.train(False)
+    running_loss = 0.0
+
+    for batch_index, batch in enumerate(validate_loader):
+        x_batch, y_batch = batch[0], batch[1]
+
+        with torch.no_grad():
+            output = model.timestamp_lstm(x_batch)
+            loss = loss_function(output, y_batch)
+            running_loss += loss
+
+    avg_loss = running_loss / len(validate_loader)
+
+    return avg_loss
+
+
+"""
+List of timestamps to list of differences
+"""
+def list_to_difs(input):
+    result = []
+    for conv in input:
+        # Retype
+        timestamps_retyped = [datetime.strptime(ts, '%H:%M:%S.%f') for ts in conv]
+
+        # Get time differences
+        if len(timestamps_retyped) == 0:
+            # No timestamp
+            time_diffs = [0.0]
+        elif len(timestamps_retyped) == 1:
+            # One timestamp
+            time_diffs = [0.0]
+        else:
+            time_diffs = [(timestamps_retyped[n] - timestamps_retyped[n - 1]).total_seconds() for n in range(1, len(timestamps_retyped))]
+
+        result.append(time_diffs)
+
+    return result
+
+
+"""
+Transform list of conversations to pytorch tensors
+"""
+def list_tensor(x, conv_len, input_dim):
+    if conv_len > 0:
+        ret = torch.tensor(())
+        tmp = torch.tensor((), dtype=torch.float32)
+
+        for conv in range(len(x)):
+            tmp = tmp.new_zeros(1, conv_len, input_dim)
+
+            for msg in range(len(x[conv])):
+                tmp[0][msg] = float(x[conv][msg])
+
+            ret = torch.cat((ret, tmp))
+        return ret
+    else:
+        ret = torch.tensor(())
+        ret = ret.new_zeros(1, 1, input_dim)
+        return ret
+
+
 """
 Main
 """
@@ -237,8 +346,32 @@ def main():
 
         testing_aut = [[(t[1], t[2]) for t in sublist] for sublist in testing]
 
-        training_neural = [[t[0] for t in sublist] for sublist in training]
         training_aut = [[(t[1], t[2]) for t in sublist] for sublist in training]
+        training_neural = [[t[0] for t in sublist] for sublist in training]
+
+        index = int(len(training_neural) * LEARNING)
+
+        # get time differences
+        learn, validate = training_neural[:index], training_neural[index:]
+        learn = list_to_difs(learn)
+        validate = list_to_difs(validate)
+
+        # convert to tensors
+        conv_len = max(len(row) for row in learn)
+        x_learn = list_tensor(learn, conv_len, 1)
+
+        conv_len = max(len(row) for row in validate)
+        x_validate = list_tensor(validate, conv_len, 1)
+
+        # create loaders
+        y_learn = torch.zeros(x_learn.shape[0], 1, 1)
+        y_validate = torch.zeros(x_validate.shape[0], 1, 1)
+
+        learn_dataset = NetworkDataset(x_learn, y_learn)
+        validate_dataset = NetworkDataset(x_validate, y_validate)
+
+        learn_loader = DataLoader(learn_dataset, BATCH_SIZE, shuffle=True)
+        validate_loader = DataLoader(validate_dataset, BATCH_SIZE, shuffle=False)
 
         ########################################################################
 
@@ -249,18 +382,44 @@ def main():
             sys.exit(1)
 
         ########################################################################
-        # Storing model
+        # Convert automaton
         ########################################################################
 
         par = ent_format(compr_parser.compair)
         filename = "{0}/{1}.pth".format(file_path, par)
         model = aux_func.convert_to_model(fa)
-        aux_func.checkpoint(model, filename)
-
-        for conversation in training_neural:
-            model.timestamp_forward(conversation)
 
         ########################################################################
+        # Learn LSTM
+        ########################################################################
+
+        loss_function = nn.L1Loss()
+        optimizer = torch.optim.Adam(model.lstm.parameters(), lr=LEARNING_RATE)
+
+        best_loss = 100
+        best_epoch = 0
+
+        # learning loop
+        for epoch in range(MAX_EPOCH):
+            train_epoch(model, learn_loader, epoch, loss_function, optimizer)
+            loss = validate_epoch(model, validate_loader, loss_function)
+
+            print("Loss at epoch {0}: {1}".format((epoch + 1), loss))
+
+            # saving best model
+            if (loss < best_loss):
+                best_loss = loss
+                best_epoch = epoch
+                aux_func.checkpoint(model, filename)
+
+            # if model doesnt improve stop loop
+            if (epoch - best_epoch > STOP_EARLY_THRESHOLD):
+                print("Training stopped early at epoch {0}".format((epoch + 1)))
+                break
+
+        ########################################################################
+
+        print()
 
         miss = 0
         for line in testing_aut:

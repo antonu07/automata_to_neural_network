@@ -73,13 +73,19 @@ def process_window(model: aut_model.AutomatonNetwork, window):
 
     return res
 
-
 def checkpoint(model: aut_model.AutomatonNetwork, filename: str):
     """
     Creates checkpoint from model.
     """
 
-    torch.save(model.state_dict(), filename)
+    torch.save({'index_map': model.index_map,
+                'start_prob': model.start_prob,
+                'start_vector': model.start_vector,
+                'transfer_matrices': model.transfer_matrices,
+                'prob_vectors': model.prob_vectors,
+                'finals_vector': model.finals_vector,
+                'lstm': model.lstm.state_dict(),
+                }, filename)
 
 
 def resume(model: aut_model.AutomatonNetwork, filename: str):
@@ -87,8 +93,14 @@ def resume(model: aut_model.AutomatonNetwork, filename: str):
     Resumes state of model from checkpoint.
     """
 
-    state = torch.load(filename)
-    model.load_state_dict(state)
+    checkpoint = torch.load(filename, weights_only=False)
+    model.index_map = checkpoint['index_map']
+    model.start_prob = checkpoint['start_prob']
+    model.start_vector = checkpoint['start_vector']
+    model.transfer_matrices = checkpoint['transfer_matrices']
+    model.prob_vectors = checkpoint['prob_vectors']
+    model.finals_vector = checkpoint['finals_vector']
+    model.lstm.load_state_dict(checkpoint['lstm'])
 
 
 def print_model(model: aut_model.AutomatonNetwork):

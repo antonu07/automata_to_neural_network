@@ -37,14 +37,14 @@ class AutomatonNetwork(nn.Module):
         """
         Definition of forward pass of the model.
         """
-        print("full convs: {0}".format(conversation))
+
         timestamps = [tuple[0] for tuple in conversation]
         asduType_cot = [(tuple[1], tuple[2]) for tuple in conversation]
-        print("timestamp: {0}".format(timestamps))
-        print("other: {0}".format(asduType_cot))
+
         ret_timestamp = self.timestamp_forward(timestamps)
+        ret_timestamp = ret_timestamp.squeeze(-1).squeeze(-1).squeeze(-1)
         ret_automaton = self.automaton_forward(asduType_cot)
-        print("{0}, {1}".format(ret_automaton, ret_timestamp))
+        
         return ret_automaton
 
     def automaton_forward(self, conversation):
@@ -95,17 +95,17 @@ class AutomatonNetwork(nn.Module):
         else:
             time_diffs = [(timestamps_retyped[n] - timestamps_retyped[n - 1]).total_seconds() for n in range(1, len(timestamps_retyped))]
 
-        inputs = torch.tensor(time_diffs, dtype=torch.float32, requires_grad=False)
+        inputs = torch.tensor([time_diffs], dtype=torch.float32, requires_grad=False)
         inputs = inputs.unsqueeze(-1)
-        print(inputs.size())
 
-        return self.timestamp_lstm(inputs, 0)
+        return self.timestamp_lstm(inputs)
 
-    def timestamp_lstm(self, timestamps, batch_size):
+    def timestamp_lstm(self, timestamps):
         """
         Definition of the LSTM.
         """
 
+        batch_size = timestamps.size(0)
         h0 = torch.zeros(STACKED, batch_size, HIDDEN)
         c0 = torch.zeros(STACKED, batch_size, HIDDEN)
 

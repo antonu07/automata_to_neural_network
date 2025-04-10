@@ -339,6 +339,8 @@ def main():
             if Model_exists:
                 # Processing conversations
                 conv = window.get_all_conversations(abstraction)
+                conv_len = max(len(row) for row in conv)
+                print(conv_len)
                 r = aux_func.process_window(model, conv)
                 res[item.compair].append(r)
             else:

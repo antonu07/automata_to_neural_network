@@ -41,11 +41,16 @@ class AutomatonNetwork(nn.Module):
         timestamps = [tuple[0] for tuple in conversation]
         asduType_cot = [(tuple[1], tuple[2]) for tuple in conversation]
 
+        # get results from automaton and LSTM
         ret_timestamp = self.timestamp_forward(timestamps)
         ret_timestamp = ret_timestamp.squeeze(-1).squeeze(-1).squeeze(-1)
         ret_automaton = self.automaton_forward(asduType_cot)
 
-        return ret_automaton
+        # chose the higher value, and filter low values from LSTM
+        if (ret_automaton + 0.001) < ret_timestamp:
+            return ret_timestamp
+        else:
+            return ret_automaton
 
     def automaton_forward(self, conversation):
         """

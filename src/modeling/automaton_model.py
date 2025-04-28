@@ -44,7 +44,7 @@ class AutomatonNetwork(nn.Module):
         ret_timestamp = self.timestamp_forward(timestamps)
         ret_timestamp = ret_timestamp.squeeze(-1).squeeze(-1).squeeze(-1)
         ret_automaton = self.automaton_forward(asduType_cot)
-        
+
         return ret_automaton
 
     def automaton_forward(self, conversation):
@@ -111,6 +111,7 @@ class AutomatonNetwork(nn.Module):
 
         out, _ = self.lstm(timestamps, (h0, c0))
         out = self.gaussian(out)
+        out = 1 - out
         return out
 
 

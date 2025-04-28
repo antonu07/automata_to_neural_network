@@ -213,12 +213,7 @@ Print help message
 def print_help():
     print("./anomaly_distr <valid traffic csv> <anomaly csv> [OPT]")
     print("OPT are from the following: ")
-    print("\t--atype=pa/pta\t\tlearning based on PAs/PTAs (default PA)")
-    print("\t--alg=distr/member\tanomaly detection based on comparing distributions (distr) or single message reasoning (member) (default distr)")
     print("\t--format=conv/ipfix\tformat of input data: conversations (conv) or csv data in ipfix format (ipfix)")
-    print("\t--smoothing\t\tuse smoothing (for distr only)")
-    print("\t--reduced=val\t\tremove similar automata with the error upper-bound val [0,1] (for distr only)")
-    print("\t--threshold=val\t\tdetect anomalies with a given threshold (for distr only)")
     print("\t--help\t\t\tprint this message")
 
 
@@ -250,9 +245,9 @@ Distribution-comparison-based anomaly detection
 """
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "hr:t:a:sf:", ["help", "reduced=", "atype=", "alg=", "smoothing", "format=", "threshold="])
+        opts, args = getopt.getopt(sys.argv[1:], "hr:t:a:sf:", ["help", "format="])
         if len(args) > 1:
-            opts, _ = getopt.getopt(sys.argv[3:], "hr:t:a:sf:", ["help", "reduced=", "atype=", "alg=", "smoothing", "format=", "threshold="])
+            opts, _ = getopt.getopt(sys.argv[3:], "hr:t:a:sf:", ["help", "format="])
     except getopt.GetoptError as err:
         sys.stderr.write("Error: bad parameters (try --help)\n")
         sys.exit(1)
@@ -261,30 +256,12 @@ def main():
     learn_proc = learn_proc_pa
     golden_proc = learn_golden_distr
 
+    par.alg = Algorithms.MEMBER
+
     for o, a in opts:
-        if o in ("--atype", "-t"):
-            if a == "pa":
-                par.aut_type = AutType.PA
-                learn_proc = learn_proc_pa
-            elif a == "pta":
-                par.aut_type = AutType.PTA
-                learn_proc = learn_proc_pta
-        elif o in ("--alg", "-a"):
-            if a == "distr":
-                par.alg = Algorithms.DISTR
-                golden_proc = learn_golden_distr
-            elif a == "member":
-                par.alg = Algorithms.MEMBER
-                golden_proc = learn_golden_member
-        elif o in ("--threshold"):
-            par.threshold = float(a)
-        elif o == "--smoothing":
-            par.smoothing = True
-        elif o in ("-h", "--help"):
+        if o in ("-h", "--help"):
             print_help()
             sys.exit()
-        elif o in ("-r", "--reduced"):
-            par.reduced = float(a)
         elif o in ("-f", "--format"):
             if a == "conv":
                 par.file_format = InputFormat.CONV
@@ -339,8 +316,6 @@ def main():
             if Model_exists:
                 # Processing conversations
                 conv = window.get_all_conversations(abstraction)
-                conv_len = max(len(row) for row in conv)
-                print(conv_len)
                 r = aux_func.process_window(model, conv)
                 res[item.compair].append(r)
             else:

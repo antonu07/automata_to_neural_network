@@ -31,7 +31,7 @@ class AutomatonNetwork(nn.Module):
         self.finals_vector = finals_vector
         self.internal_vector = None
 
-        self.lstm = nn.LSTM(1, HIDDEN, STACKED, batch_first=True, proj_size=0)
+        self.lstm = nn.LSTM(input_size=1, hidden_size=HIDDEN, num_layers=STACKED, batch_first=True, proj_size=0)
 
     def forward(self, conversation):
         """
@@ -43,7 +43,7 @@ class AutomatonNetwork(nn.Module):
 
         # get results from automaton and LSTM
         ret_timestamp = self.timestamp_forward(timestamps)
-        ret_timestamp = ret_timestamp.squeeze(-1).squeeze(-1).squeeze(-1)
+        ret_timestamp = ret_timestamp[-1, -1, -1]
         ret_automaton = self.automaton_forward(asduType_cot)
 
         # chose the higher value, and filter low values from LSTM
@@ -118,7 +118,6 @@ class AutomatonNetwork(nn.Module):
         out = self.gaussian(out)
         out = 1 - out
         return out
-
 
     def gaussian(self, x, alpha=1.0):
         return torch.exp(-alpha * x**2)

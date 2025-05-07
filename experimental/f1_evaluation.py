@@ -6,7 +6,7 @@ import pandas as pd
 from collections import defaultdict
 
 # Select attack file used
-SELECTED_ATTACK = "rogue-devices"
+SELECTED_ATTACK = "dos-attack"
 
 # Statistics gathered using dataset_analysis.py
 ATTACKS = {
@@ -31,6 +31,9 @@ ATTACKS = {
     },
     "rogue-devices": {
         ('36', '3'): 289
+    },
+    "dos-attack": {
+        ('36', '3'): 1048
     },
     "other": {
     }

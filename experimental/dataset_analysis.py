@@ -6,7 +6,7 @@ from datetime import datetime, time
 from collections import defaultdict
 
 # Columns needed
-COLUMNS = ["asduType", "cot"]
+COLUMNS = ["TimeStamp", "asduType", "cot"]
 
 # selection of file to analyze
 SELECTED_FILE = "dos-attack"
@@ -72,11 +72,12 @@ def main():
     # read file
     file = sys.argv[1]
     data = pd.read_csv(file, delimiter=";")
+    sum = 0
 
     # remove empty
     data = data.dropna(subset=COLUMNS)
-    data = data.astype({COLUMNS[0]: int, COLUMNS[1]: int})
-    data = data.astype({COLUMNS[0]: str, COLUMNS[1]: str})
+    data = data.astype({COLUMNS[1]: int, COLUMNS[2]: int})
+    data = data.astype({COLUMNS[1]: str, COLUMNS[2]: str})
 
     # create dictionary for the tuples
     outputs = defaultdict(int)
@@ -88,9 +89,11 @@ def main():
 
     for _, packet in data.iterrows():
         if check(packet):
-            outputs[tuple([packet[COLUMNS[0]], packet[COLUMNS[1]]])] += 1
+            outputs[tuple([packet[COLUMNS[0]], packet[COLUMNS[1]], packet[COLUMNS[2]]])] += 1
+            sum += 1
 
     print(outputs)
+    print("Sum of anomalies: {0}".format(sum))
 
 
 if __name__ == "__main__":

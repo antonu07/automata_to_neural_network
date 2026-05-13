@@ -63,13 +63,18 @@ def convert_to_model(automaton: core_wfa.CoreWFA) -> aut_model.AutomatonNetwork:
 
 
 def process_window(model: aut_model.AutomatonNetwork, window):
+    model.batch = False
     res = []
 
     for conversation in window:
-
         prob = model(conversation)
-        if prob >= 1.0:
-            res.append(conversation)
+        # used to display the probability
+        #if prob > 0.01:
+        #    res.append(prob)
+        # trained models seem to go down to about 0.95 and then have large gap to valid communication
+        print(prob)
+        if prob >= 0.9:
+           res.append(conversation)
 
     return res
 
@@ -84,7 +89,9 @@ def checkpoint(model: aut_model.AutomatonNetwork, filename: str):
                 'transfer_matrices': model.transfer_matrices,
                 'prob_vectors': model.prob_vectors,
                 'finals_vector': model.finals_vector,
+                'batch': model.batch,
                 'lstm': model.lstm.state_dict(),
+                'dec': model.dec.state_dict(),
                 }, filename)
 
 
@@ -100,7 +107,9 @@ def resume(model: aut_model.AutomatonNetwork, filename: str):
     model.transfer_matrices = checkpoint['transfer_matrices']
     model.prob_vectors = checkpoint['prob_vectors']
     model.finals_vector = checkpoint['finals_vector']
+    model.batch = checkpoint['batch']
     model.lstm.load_state_dict(checkpoint['lstm'])
+    model.dec.load_state_dict(checkpoint['dec'])
 
 
 def print_model(model: aut_model.AutomatonNetwork):

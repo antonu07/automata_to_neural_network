@@ -31,26 +31,61 @@ class AutomatonNetwork(nn.Module):
         self.finals_vector = finals_vector
         self.internal_vector = None
 
+        self.batch = True
+
         self.lstm = nn.LSTM(input_size=1, hidden_size=HIDDEN, num_layers=STACKED, batch_first=True, proj_size=0)
+        self.dec = nn.Linear(2, 1)
 
     def forward(self, conversation):
         """
         Definition of forward pass of the model.
         """
 
-        timestamps = [tuple[0] for tuple in conversation]
-        asduType_cot = [(tuple[1], tuple[2]) for tuple in conversation]
+        final = self.analyzers_run(conversation)
+
+        return self.decider(final)
+
+    def analyzers_run(self, conversation):
+        """
+        Runs both automaton and LSTM and returns tensor for the decider
+        """
+
+        if self.batch:
+            # training data (batch)
+            timestamps = []
+            asduType_cot = []
+            for item in conversation:
+                timestamps.append([tuple[0] for tuple in item])
+                asduType_cot.append([(tuple[1], tuple[2]) for tuple in item])
+        else:
+            # not training (single input)
+            timestamps = [tuple[0] for tuple in conversation]
+            asduType_cot = [(tuple[1], tuple[2]) for tuple in conversation]
 
         # get results from automaton and LSTM
-        ret_timestamp = self.timestamp_forward(timestamps)
-        ret_timestamp = ret_timestamp[-1, -1, -1]
-        ret_automaton = self.automaton_forward(asduType_cot)
+        ret_automaton = self.automaton_run(asduType_cot)
+        ret_timestamp = self.timestamp_run(timestamps)
 
-        # chose the higher value, and filter low values from LSTM
-        if (ret_automaton + 0.001) < ret_timestamp:
-            return ret_timestamp
+        final = torch.cat((ret_timestamp, ret_automaton), 1)
+        return final
+
+    def automaton_run(self, conversation):
+        """
+        Processes forward run for both batches and single runs.
+        """
+        if self.batch:
+            # training data (batch)
+            res = self.automaton_forward(conversation[0])
+            res = res.expand(1, 1)
+            for conv in conversation[1:]:
+                out = self.automaton_forward(conv)
+                out = out.expand(1, 1)
+                res = torch.cat((res, out))
+            return res
+
         else:
-            return ret_automaton
+            # not training (single input)
+            return self.automaton_forward(conversation).expand(1, 1)
 
     def automaton_forward(self, conversation):
         """
@@ -61,6 +96,8 @@ class AutomatonNetwork(nn.Module):
         prob = self.start_prob
 
         for character in conversation:
+            if character == ('0', '0'):
+                break
             prob = prob + self.__get_prob(character)
             self.__transfer_state(character)
 
@@ -82,10 +119,34 @@ class AutomatonNetwork(nn.Module):
         """
         self.internal_vector = self.internal_vector @ self.transfer_matrices[self.index_map[character]]
 
+    def timestamp_run(self, timestamps):
+        """
+        Processes forward run for both batches and single runs.
+        """
+        if self.batch:
+            # training data (batch)
+            conv = [x for x in timestamps[0] if x != '0']
+            res = self.timestamp_forward(conv)
+            res = res[:, -1, :]
+            res = res.expand(1, 1)
+            for conv in timestamps[1:]:
+                conv = [x for x in conv if x != '0']
+                out = self.timestamp_forward(conv)
+                out = out[:, -1, :]
+                out = out.expand(1, 1)
+                res = torch.cat((res, out))
+            return res
+
+        else:
+            # not training (single input)
+            return self.timestamp_forward(timestamps)[:, -1, :]
+
     def timestamp_forward(self, timestamps):
         """
         Definition of forward pass on the timestamps.
         """
+
+        # fix this for padded lists
 
         # Retype
         timestamps_retyped = [datetime.strptime(ts, '%H:%M:%S.%f') for ts in timestamps]
@@ -121,3 +182,13 @@ class AutomatonNetwork(nn.Module):
 
     def gaussian(self, x, alpha=1.0):
         return torch.exp(-alpha * x**2)
+
+    def decider(self, input):
+        """
+        Decider layer
+        """
+
+        out = self.dec(input)
+        out = torch.sigmoid(out)
+
+        return out

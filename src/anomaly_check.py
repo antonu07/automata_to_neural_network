@@ -52,7 +52,8 @@ import modeling.automaton_model as aut_model
 SPARSE = False
 
 rows_filter_normal = ["TimeStamp", "asduType", "cot"]
-DURATION = 300
+# attack = 300, convs = 10
+DURATION = 10
 AGGREGATE = True
 ACCELERATE = False
 

@@ -24,6 +24,7 @@ import getopt
 import os
 import csv
 import math
+import ast
 from enum import Enum
 from dataclasses import dataclass
 
@@ -41,15 +42,21 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
+from torch.utils.data import random_split
 
 from datetime import datetime, timedelta
 
-# LSTM learning
-LEARNING_RATE = 0.05
-MAX_EPOCH = 50
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
+# NN learning
+LEARNING_RATE = 0.10
+# attack = 100, 50_convs = 500
+MAX_EPOCH = 500
 STOP_EARLY_THRESHOLD = 5
 LEARNING = 0.85
-BATCH_SIZE = 512
+# attack = 512, 50_convs = 4
+BATCH_SIZE = 4
 
 ComPairType = FrozenSet[Tuple[str,str,str]]
 rows_filter = ["TimeStamp", "asduType", "cot"]
@@ -173,7 +180,10 @@ class NetworkDataset(Dataset):
         return len(self.X)
 
     def __getitem__(self, i):
-        return self.X[i], self.y[i]
+        return {
+            "x": self.X[i],
+            "y": self.y[i],
+        }
 
 
 """
@@ -183,7 +193,7 @@ def train_epoch(model, learn_loader, epoch, loss_function, optimizer):
     model.train(True)
 
     for batch_index, batch in enumerate(learn_loader):
-        x_batch, y_batch = batch[0], batch[1]
+        x_batch, y_batch = batch["x"], batch["y"]
 
         output = model.timestamp_lstm(x_batch)
         loss = loss_function(output, y_batch)
@@ -200,7 +210,7 @@ def validate_epoch(model, validate_loader, loss_function):
     running_loss = 0.0
 
     for batch_index, batch in enumerate(validate_loader):
-        x_batch, y_batch = batch[0], batch[1]
+        x_batch, y_batch = batch["x"], batch["y"]
 
         with torch.no_grad():
             output = model.timestamp_lstm(x_batch)
@@ -256,6 +266,57 @@ def list_tensor(x, conv_len, input_dim):
         ret = torch.tensor(())
         ret = ret.new_zeros(1, 1, input_dim)
         return ret
+
+
+"""
+Classifier training function
+"""
+def train_class(model, learn_loader, epoch, loss_function, optimizer):
+    model.train(True)
+
+    for batch_index, batch in enumerate(learn_loader):
+        x_batch, y_batch = batch["x"], batch["y"]
+
+        output = model.decider(x_batch)
+        loss = loss_function(output, y_batch)
+        optimizer.zero_grad()
+        loss.backward(retain_graph=True)
+        optimizer.step()
+
+
+"""
+Classifier validation function
+"""
+def validate_class(model, validate_loader, loss_function):
+    model.train(False)
+    running_loss = 0.0
+
+    for batch_index, batch in enumerate(validate_loader):
+        x_batch, y_batch = batch["x"], batch["y"]
+
+        with torch.no_grad():
+            output = model.decider(x_batch)
+            loss = loss_function(output, y_batch)
+            running_loss += loss
+
+    avg_loss = running_loss / len(validate_loader)
+
+    return avg_loss
+
+
+"""
+Collate_fn for dataloaders
+"""
+def dynamic_len_collate(batch):
+    max_len = max(len(item["x"]) for item in batch)
+    batch_x = []
+    for item in batch:
+        pad_len = max_len - len(item["x"])
+        batch_x.append(item["x"] + [('0', '0', '0')]*pad_len)
+    return {
+        "x": batch_x,
+        "y": [item["y"] for item in batch],
+    }
 
 
 """
@@ -325,7 +386,10 @@ def main():
     # Creating directory for models
     ############################################################################
 
-    file_path = os.path.splitext(os.path.basename(csv_file))[0]
+    automaton_train = os.path.splitext(csv_file)[0]
+    decider_train = os.path.splitext(os.path.basename(args[1]))[0]
+
+    file_path = automaton_train + '-' + decider_train
 
     if not os.path.exists(file_path):
         os.mkdir(file_path)
@@ -393,7 +457,7 @@ def main():
         # Learn LSTM
         ########################################################################
 
-        loss_function = nn.L1Loss()
+        loss_function = nn.MSELoss()
         optimizer = torch.optim.Adam(model.lstm.parameters(), lr=LEARNING_RATE)
 
         best_loss = 100
@@ -434,6 +498,110 @@ def main():
         print("Testing: {0}/{1} (missclassified/all)".format(miss, len(testing_aut)))
         if len(testing_aut) > 0:
             print("Accuracy: {0}".format((len(testing_aut)-miss)/float(len(testing_aut))))
+
+    ########################################################################
+    # Prepare data for classifier
+    ########################################################################
+
+    # get conversations
+    file = args[1]
+    try:
+        fd = open(file, "r")
+    except FileNotFoundError:
+        sys.stderr.write("Cannot open file: {0}\n".format(file))
+        sys.exit(1)
+    train_msgs = con_par.get_messages(fd)
+    fd.close()
+
+    parser = None
+    try:
+        parser = con_par.IEC104Parser(train_msgs)
+    except KeyError as e:
+        sys.stderr.write("Missing column in the input csv: {0}\n".format(e))
+        sys.exit(1)
+
+    # parse conversations into a list
+    parser.parse_conversations()
+    x_base = parser.get_all_conversations(abstraction)
+
+    # get outputs from file
+    file = args[2]
+    try:
+        fd = open(file, "r")
+    except FileNotFoundError:
+        sys.stderr.write("Cannot open file: {0}\n".format(file))
+        sys.exit(1)
+    expected_out = ast.literal_eval(fd.read())
+    fd.close()
+
+    # convert outputs to tensor
+    conv_len = max(len(row) for row in expected_out)
+    y_train = list_tensor(expected_out, conv_len, 1)
+
+    y_train = torch.squeeze(y_train, 1)
+
+    # each model will be trained with the same data (should be trained according to the communication pairs)
+    for file in os.listdir(file_path):
+        # load model
+        pth = "{0}/{1}".format(file_path, file)
+        aux_func.resume(model, pth)
+
+        # freeze LSTM
+        for param in model.lstm.parameters():
+            param.requires_grad = False
+
+        ######################################################################
+        # Create custom data loader
+        ######################################################################
+
+        model.train(True)
+        x_train = model.analyzers_run(x_base)
+        model.train(False)
+
+        # create dataloader for learning and validation
+        full_dataset = NetworkDataset(x_train, y_train)
+
+        train_size = int(LEARNING * len(full_dataset))
+        val_size = len(full_dataset) - train_size
+
+        train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+
+        # add collate function to allow different size inputs
+        train_loader = DataLoader(train_dataset, BATCH_SIZE, shuffle=True)
+        val_loader = DataLoader(val_dataset, BATCH_SIZE, shuffle=False)
+
+        ######################################################################
+        # Training loop
+        ######################################################################
+
+        # functions and variables for learning loop
+        loss_function = nn.MSELoss()
+        optimizer = torch.optim.Adam(model.dec.parameters(), lr=LEARNING_RATE)
+
+        best_loss = 100
+        best_epoch = 0
+
+        # learning loop
+        print()
+        print("Training classifier for model: {0}".format(pth))
+        for epoch in range(MAX_EPOCH):
+            train_class(model, train_loader, epoch, loss_function, optimizer)
+            loss = validate_class(model, val_loader, loss_function)
+
+            print("Loss at epoch {0}: {1}".format((epoch + 1), loss))
+
+            # saving best model
+            if (loss < best_loss):
+                best_loss = loss
+                best_epoch = epoch
+                aux_func.checkpoint(model, pth)
+
+            # if model doesn't improve stop loop
+            if (epoch - best_epoch > STOP_EARLY_THRESHOLD):
+                print("Training stopped early at epoch {0}".format((epoch + 1)))
+                break
+
+        ######################################################################
 
 
 if __name__ == "__main__":

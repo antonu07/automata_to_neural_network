@@ -6,7 +6,7 @@ import pandas as pd
 from collections import defaultdict
 
 # Select attack file used
-SELECTED_ATTACK = "other"
+SELECTED_ATTACK = "rogue-devices-combo"
 
 # Statistics gathered using dataset_analysis.py
 ATTACKS = {
